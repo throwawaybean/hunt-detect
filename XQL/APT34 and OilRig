@@ -1,27 +1,56 @@
-// Description: Identifies commands during archiving and exfiltration 
-// MITRE ATT&CK TTP ID: T1074.001 - Data Staged: Local Data Staging
-config case_sensitive = false 
-| dataset = xdr_data 
-| fields _time, agent_hostname, actor_process_command_line, event_type, causality_actor_process_command_line, action_process_image_command_line
-| filter event_type = ENUM.PROCESS | filter action_process_image_command_line = "*rar* a -r -tk -ta* -n*.doc* -n*.docx* -n.xls* -n*.pdf* -n*.ppt* -n*.pptx* -n*.txt* C:\programata\IDM\*.rar *" or action_process_image_command_line = "curl --progress-bar -C --T C:\programdata\IDM\*.RAR ftp://*:*__;Kio!!B71jDkO1UN9cuT4r0w!6F6J1HL4hz5LAxW69dvfB7I_pWoPls17A6zCjWZ54RYvpOOyRF77lFWLvXCpJRe9LNAU99BQZQ_PsUYc0B1Vf4096oXq$ "
+// Description: Identifies the execution of NGROK from C:\Users\Public. Also attempts to extract the config file path, if one is specified in the CLI. If no config file is specified, it resides in the same directory as the binary.
+// MITRE ATT&CK TTP ID: T1572 - Tunneling
+config case_sensitive = false
+| dataset = xdr_data
+| fields _time, agent_hostname, event_type, event_sub_type, agent_os_type, actor_effective_username, actor_process_image_name, actor_process_command_line, action_process_image_name, action_process_image_command_line, action_process_file_info, action_process_signature_product, action_process_signature_status, action_process_signature_vendor, action_process_image_path
+
+| filter event_type = ENUM.PROCESS and event_sub_type = ENUM.PROCESS_START and agent_os_type = ENUM.AGENT_OS_WINDOWS
+
+| alter description = action_process_file_info -> description
+| alter product_name = action_process_file_info -> product_name
+| alter config_file_path = arrayindex(regextract(action_process_image_command_line, "--config\s.*?(\w.*)"),0)
+
+| filter (action_process_image_name = "ngrok.exe" or description contains "ngrok" or product_name contains "ngrok" or action_process_signature_product contains "ngrok" or action_process_signature_vendor = "ngrok") and action_process_image_path contains "C:\Users\Public"
+
+| fields _time, agent_hostname, event_type, event_sub_type , actor_effective_username, actor_process_image_name, actor_process_command_line, action_process_image_name, action_process_image_command_line, config_file_path, action_process_file_info, action_process_signature_product, action_process_signature_status, action_process_signature_vendor
 
 
-// Description: This checks for potential DLL hijacking for coccocpdate.dll or u2ec.dll
-// MITRE ATT&CK TTP ID: T1574.001: Hijack Execution Flow: DLL Search Order Hijacking
+// Description: Identifies PowerShell creating a scheduled task with a specific task name, and cli parameters.
+// MITRE ATT&CK TTP ID: T1059.001 - PowerShell
+// MITRE ATT&CK TTP ID: T1053.005 - Scheduled Tasks
 config case_sensitive = false
 | dataset = xdr_data 
-| filter event_type = ENUM.LOAD_IMAGE
-| filter (action_module_path contains "\u2ec.dll") or (action_module_path contains "\coccocpdate.dll" and actor_process_signature_product = "COC COC COMPANY LIMITED") or (action_module_path contains "\msedge.dll" and actor_process_signature_vendor = "Microsoft Corporation") or (action_module_path contains "\coreglobconfig.dll")
-| filter actor_process_signature_status = ENUM.SIGNED and action_module_signature_status = ENUM.UNSIGNED
-| fields agent_hostname, action_module_path, actor_process_image_name, actor_process_sign*, action_module_signatu*, action_module_sha256, actor_process_command_line
+| fields _time, agent_hostname, event_type, action_rpc_interface_uuid, action_rpc_func_opnum, actor_process_image_name, actor_process_command_line, actor_process_image_sha256, action_rpc_func_name, action_rpc_func_str_call_fields
+| filter event_type = ENUM.RPC_CALL
+| filter action_rpc_interface_uuid = "{86D35949-83C9-4044-B424-DB363231FD0C}" and action_rpc_func_opnum = 1
+| alter xml = action_rpc_func_str_call_fields -> xml
+| alter path = action_rpc_func_str_call_fields -> path
+| alter sddl = action_rpc_func_str_call_fields -> sddl
+| alter pCreds = action_rpc_func_str_call_fields -> pCreds
+| alter task_author = arrayindex(regextract(xml, "<Author>(.*)</Author>"), 0)
+| alter task_description = arrayindex(regextract(xml, "<Description>(.*)</Description>"), 0)
+| alter task_command_parsed = arrayindex(regextract(xml, "<Command>(.*)</Command>"), 0)
+| alter task_arguments_parsed = arrayindex(regextract(xml, "<Arguments>(.*)</Arguments>"), 0)
+| alter task_userid_parsed = arrayindex(regextract(xml, "<UserId>(.*)</UserId>"), 0)
+| alter full_command = task_command_parsed + " " + task_arguments_parsed
 
-// Description: Checking for persistence by both Scheduled Task and Run registry key
-// MITRE ATT&CK TTP ID: T1053.005 - Scheduled Tasks
-config case_sensitive = false 
+| filter path contains "\MicrosoftEdgeUpdateTaskMachineUK" and actor_process_command_line contains "C:\Users\Public"
+
+| fields _time, agent_hostname, actor_process_image_name, actor_process_command_line, actor_process_image_sha256, action_rpc_func_name, task_author, task_description, path, task_command_parsed, task_arguments_parsed, task_userid_parsed, full_command
+
+
+// Description: Identifies file writes of a psgfilter to system32
+// MITRE ATT&CK TTP ID: T1556.002 - Modify Authentication Process: Password Filter DLL
+config case_sensitive = false
 | dataset = xdr_data 
-| fields agent_hostname, causality_actor_process_command_line as task_cgo, action_rpc_func_name, action_rpc_func_str_call_fields, event_type , event_sub_type, actor_process_command_line as task_actor
-| filter event_type = RPC_CALL and action_rpc_func_name = "SchRpcRegisterTask"
-| alter task_command_parsed = arrayindex(regextract(action_rpc_func_str_call_fields, "<Command>(.*)</Command>"), 0)
-| alter task_command_parsed = replace(task_command_parsed ,"\"", "")
-| alter task_command_parsed = replace(task_command_parsed, """\\\\""", "\")
-| filter task_command_parsed contains "CocCocBrowser"
+| fields _time, agent_hostname, actor_effective_username, actor_process_image_name, actor_process_image_command_line, action_file_name, action_file_path, action_file_sha256, action_file_signature_product, action_file_signature_vendor, action_file_signature_status, event_type, event_sub_type 
+| filter event_type = ENUM.FILE and event_sub_type in (ENUM.FILE_WRITE, ENUM.FILE_CREATE_NEW) and action_file_path contains "C:\Windows\System32" and action_file_name = "psgfilter.dll"
+
+
+// Description: Identifies the registry modification to register a Password Filter DLL
+// MITRE ATT&CK TTP ID: T1556.002 - Modify Authentication Process: Password Filter DLL
+config case_sensitive = false
+| dataset = xdr_data 
+| fields _time, agent_hostname, actor_effective_username, actor_process_image_name, actor_process_command_line, event_sub_type, action_registry_key_name, action_registry_value_name, action_registry_data, action_registry_value_type, event_type
+| filter event_type = ENUM.REGISTRY and event_sub_type = ENUM.REGISTRY_SET_VALUE
+| filter action_registry_key_name ~= "HKEY_LOCAL_MACHINE\\SYSTEM\\ControlSet[\d]\\Control\\Lsa" and action_registry_value_name = "psgfilter"

@@ -1,0 +1,17 @@
+// Description : AMOS Stealer for MacOS being distributed as "Launcher_v1.94.dmg"
+// MITRE ID: T1204.002 User Execution: Malicious File
+config case_sensitive=false
+| dataset=xdr_data 
+| fields agent_os_type, event_sub_type, action_file_name , action_file_sha256, agent_hostname , _time , actor_process_image_name 
+| filter agent_os_type = ENUM.AGENT_OS_MAC and event_sub_type=ENUM.FILE_WRITE and action_file_name = "Launcher_v1.94.dmg"
+
+
+// Description : RunMRU key starting with mshta indicating successful run of a clickfix technique
+// MITRE ID: T1218.005 System Binary Proxy Execution: Mshta
+ config case_sensitive = false
+| dataset = xdr_data
+| fields _time, agent_hostname, agent_ip_addresses, actor_effective_username, action_process_image_name, action_process_image_path, action_process_image_command_line, actor_process_image_name, actor_process_image_path, actor_process_command_line, os_actor_process_command_line, action_registry_value_name, action_registry_data, action_registry_key_name, action_registry_return_val, action_registry_value_type, agent_os_type, event_type, event_sub_type
+| filter event_type = ENUM.REGISTRY and event_sub_type IN (ENUM.REGISTRY_SET_VALUE) and action_registry_key_name = "*RunMRU" and agent_os_type = ENUM.AGENT_OS_WINDOWS
+| filter action_registry_data contains "bQBzAGgAdABhACAA"
+| sort desc _time
+ 
