@@ -1,0 +1,29 @@
+// Description: Detects files related to the KANDYKORN Backdoor by monitoring specific file paths commonly used by the malware on macOS systems. 
+// MITRE ATT&CK ID: T1105 (Ingress Tool Transfer)
+
+config case_sensitive = false
+| dataset = xdr_data
+| filter event_type = ENUM.FILE
+| filter action_file_path in("/Users/shared/.log", "/Users/shared/.sld", "/Library/Caches/com.apple.safari.ck")
+| fields _time, agent_hostname, agent_ip_addresses, causality_actor_process_command_line, actor_process_command_line, action_file_name, action_file_path, action_file_sha256
+
+
+// Description: Detects renaming of the Discord application on macOS, which may indicate malicious activity such as masquerading or persistence techniques.
+// MITRE ATT&CK ID: T1036 (Masquerading).
+
+config case_sensitive = false
+| dataset = xdr_data
+| filter agent_os_type = ENUM.AGENT_OS_MAC
+| filter event_type = ENUM.FILE and event_sub_type = ENUM.FILE_RENAME
+| filter action_file_name = "Discord" or action_file_previous_file_name = "Discord"
+| filter action_file_name != action_file_previous_file_name and action_file_previous_file_name != ".BC.T_*"
+| fields _time, agent_hostname, agent_ip_addresses, causality_actor_process_command_line, actor_process_command_line, action_file_name, action_file_path, action_file_sha256, action_file_previous_file_name, action_file_previous_file_path
+
+// Description: The SmoothOperator Backdoor writes a malicious payload to a file named UpdateAgent
+// MITRE ATT&CK ID: T1036 (Masquerading)
+config case_sensitive = false
+| dataset = xdr_data
+| filter agent_os_type = ENUM.AGENT_OS_MAC 
+| filter event_type = ENUM.FILE and (event_sub_type = ENUM.FILE_CREATE_NEW or event_sub_type = ENUM.FILE_WRITE)
+| filter action_file_name = "UpdateAgent"
+| fields _time, agent_hostname, agent_ip_addresses, causality_actor_process_command_line, actor_process_command_line, action_file_name, action_file_path, action_file_sha256
