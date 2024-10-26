@@ -1,0 +1,30 @@
+/ Description: Query looks for DarkComet's 'msdcsc.exe' executable in known-bad location
+// MITRE ATT&CK ID: T1564
+
+config case_sensitive = false
+| dataset = xdr_data 
+| filter event_type = ENUM.FILE
+| filter action_file_name = "msdcsc.exe" and action_file_path ~= "\\Documents\\MSDCSC\\"
+| fields _time, agent_hostname, event_type, event_sub_type, action_file_name, action_file_path, actor_effective_username, action_file_extension, action_file_previous_file_path, action_file_web_mark, action_file_sha256, action_file_size, actor_process_image_name, actor_process_image_path, actor_process_image_sha256, causality_actor_process_image_name, causality_actor_process_image_path, os_actor_primary_username, os_actor_process_command_line, os_actor_process_image_name, os_actor_process_image_path
+| sort desc _time
+
+// Description: Query looks for registry keys associated with DarkComet
+// MITRE ATT&CK IDs: T1547.001, T1547.004
+
+config case_sensitive = false
+| dataset = xdr_data
+| filter event_type = ENUM.REGISTRY
+| filter (action_registry_key_name = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" and action_registry_value_name = "Userinit" and action_registry_data contains "msdcsc.exe") or (action_registry_key_name ~= "\\Windows\\CurrentVersion\\Run" and action_registry_value_name = "MicroUpdate" and action_registry_data ~= "\\msdcsc\.exe")
+| fields _time, agent_hostname, agent_ip_addresses, actor_effective_username, action_process_image_name, action_process_image_path, action_process_image_command_line, actor_process_image_name, actor_process_image_path, actor_process_command_line, os_actor_process_command_line, action_registry_value_name, action_registry_data, action_registry_key_name, action_registry_return_val, action_registry_value_type
+| sort desc _time
+
+// Description: Query looks for DarkComet's mutex. When run, the RAT creates this mutex in memory. Upon run, the existence of the mutex in memory is checked, and the malware will not run if the mutex already exists. This avoids duplicate executions of the RAT.
+// MITRE ATT&CK ID: T1559
+
+config case_sensitive = false 
+| dataset = xdr_data 
+| filter event_type = ENUM.SYSTEM_CALL and event_sub_type = ENUM.SYSTEM_CALL_NT_CREATE_MUTANT 
+| fields _time, event_type, event_sub_type, agent_hostname, actor_effective_username, actor_process_image_name, actor_process_command_line, action_syscall_string_params 
+| alter syscall_mutant_name = json_extract(action_syscall_string_params, "$.1")
+| alter syscall_mutant_name = trim(to_string(syscall_mutant_name),"\"")
+| filter syscall_mutant_name contains "DC_MUTEX-D1SPNDG"
