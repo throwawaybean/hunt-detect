@@ -1,0 +1,26 @@
+// Description: Identifies commands observed during archiving and exfiltration 
+// MITRE ATT&CK TTP ID: T1074.001 - Data Staged: Local Data Staging
+config case_sensitive = false 
+| dataset = xdr_data 
+| fields _time, agent_hostname, causality_actor_process_command_line, actor_process_command_line, action_process_image_command_line , event_type 
+| filter event_type = ENUM.PROCESS | filter action_process_image_command_line = "*rar* a -r -tk -ta* -n*.doc* -n*.docx* -n.xls* -n*.pdf* -n*.ppt* -n*.pptx* -n*.txt* C:\programata\IDM\*.rar *" or action_process_image_command_line = "curl --progress-bar -C --T C:\programdata\IDM\*.RAR https://urldefense.com/v3/__ftp://*:*__;Kio!!B71jDkO1UN9cuT4r0w!6F6J1HL4hz5LAxW69dvfB7I_pWoPls17A6zCjWZ54RYvpOOyRF77lFWLvXCpJRe9LNAU99BQZQ_PsUYc0B1Vf4096oXq$ " 
+
+// Description: Identifies potential DLL hijacking for coccocpdate.dll or u2ec.dll
+// MITRE ATT&CK TTP ID: T1574.001: Hijack Execution Flow: DLL Search Order Hijacking
+config case_sensitive = false
+| dataset = xdr_data 
+| filter event_type = ENUM.LOAD_IMAGE
+| filter (action_module_path contains "\u2ec.dll") or (action_module_path contains "\coccocpdate.dll" and actor_process_signature_product = "COC COC COMPANY LIMITED") or (action_module_path contains "\msedge.dll" and actor_process_signature_vendor = "Microsoft Corporation") or (action_module_path contains "\coreglobconfig.dll")
+| filter action_module_signature_status = ENUM.UNSIGNED and actor_process_signature_status = ENUM.SIGNED 
+| fields agent_hostname , action_module_sha256  , action_module_path  , actor_process_image_name, actor_process_command_line, actor_process_sign*, action_module_signatu*
+
+// Description: Achieving persistance by both Scheduled Task and Run registry key
+// MITRE ATT&CK TTP ID: T1053.005 - Scheduled Tasks
+config case_sensitive = false 
+| dataset = xdr_data 
+| fields agent_hostname, causality_actor_process_command_line as task_cgo, actor_process_command_line as task_actor, action_rpc_func_name, action_rpc_func_str_call_fields, event_type , event_sub_type 
+| filter event_type = RPC_CALL and action_rpc_func_name = "SchRpcRegisterTask"
+| alter task_command_parsed = arrayindex(regextract(action_rpc_func_str_call_fields, "<Command>(.*)</Command>"), 0)
+| alter task_command_parsed = replace(task_command_parsed ,"\"", "")
+| alter task_command_parsed = replace(task_command_parsed, """\\\\""", "\")
+| filter task_command_parsed contains "CocCocBrowser"
