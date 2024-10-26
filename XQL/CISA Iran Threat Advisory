@@ -1,0 +1,49 @@
+// Description: This query filters the dataset `va_cves` to find entries specifically related to the vulnerability identified as "CVE-2020-1472". It aligns with MITRE ID T1068 - Exploitation for Privilege Escalation.
+// MITRE ID: T1068 - Exploitation for Privilege Escalation
+dataset = va_cves 
+| filter name = "CVE-2020-1472"
+
+// Description: This query identifies domain password spray attempts using PowerShell with the "Invoke-DomainPasswordSpray" command. It aligns with MITRE ID T1110.003 - Brute Force: Password Spraying.
+// MITRE ID: T1110.003 - Brute Force: Password Spraying
+config case_sensitive = false
+| dataset = xdr_data
+| filter event_type = ENUM.PROCESS and action_process_image_name = "powershell.exe" and action_process_image_command_line contains "Invoke-DomainPasswordSpray"
+| fields _time, agent_hostname, actor_effective_username, actor_process_image_path, action_process_image_path, action_process_image_command_line
+
+
+// Description: This query identifies domain enumeration activities by detecting common reconnaissance commands executed on the system. The commands include querying user information, domain groups, and network configurations, which are often used for gathering information in a compromised environment. This query deduplicates processes and counts unique command occurrences to highlight potentially suspicious behavior indicative of enumeration activities.
+// MITRE ID: T1016 - System Network Configuration Discovery and T1087 - Account Discovery
+config case_sensitive = false
+| dataset = xdr_data
+| filter event_type = PROCESS and (
+    action_process_image_command_line ~= "whoami" or
+    action_process_image_command_line ~= "hostname" or
+    action_process_image_command_line ~= "ipconfig\s+[/]all" or
+    action_process_image_command_line ~= "net\s+user\s+[/]domain" or
+    action_process_image_command_line ~= "net\s+group\s+[/]domain" or
+    action_process_image_command_line ~= "net\s+group\s+[\"]domain admins[\"]\s+[/]domain" or
+    action_process_image_command_line ~= "net\s+group\s+\"Exchange Trusted Subsystem\"\s+/domain" or
+    action_process_image_command_line ~= "net\s+accounts\s+/domain" or
+    action_process_image_command_line ~= "net\s+user" or
+    action_process_image_command_line ~= "net\s+localgroup\s+administrators" or
+    action_process_image_command_line ~= "netstat\s+-an" or
+    action_process_image_command_line ~= "systeminfo" )
+| dedup action_process_image_name
+| fields event_id, event_type, event_sub_type, agent_hostname, actor_effective_username, action_process_image_name, action_process_image_command_line, action_process_remote_session_ip, causality_actor_process_image_name, actor_process_image_name
+| comp count_distinct(action_process_image_command_line) as Unique_command_Count, values(action_process_image_name) as Commands by agent_hostname, actor_process_image_name, action_process_image_command_line
+| filter Unique_command_Count > 3
+
+
+// Description: This query detects potential Cobalt Strike activities by identifying suspicious behaviors and artifacts associated with known Cobalt Strike patterns. These include specific file paths, command-line patterns, and processes indicative of malicious activity. The query removes false positives by filtering out known legitimate software paths and trusted vendors.
+// MITRE IDs: T1059.001 - PowerShell, T1071.001 - Application Layer Protocol: Web Protocols, T1105 - Ingress Tool Transfer
+dataset = xdr_data
+| filter
+(event_type=PROCESS AND event_sub_type = PROCESS_START and lowercase(actor_process_image_name) = "services.exe" and lowercase(action_process_image_command_line) ~= ".+\\admin\$\\[a-z0-9]{7}\.exe")
+OR (event_type=PROCESS AND event_sub_type = PROCESS_START and (lowercase(action_process_image_command_line) = "c:\windows\system32\rundll32.exe" or lowercase(action_process_image_command_line) = "c:\windows\syswow64\rundll32.exe" and lowercase(actor_process_image_name) != "setup.exe" and lowercase(actor_process_command_line) not contains "chrome" and lowercase(actor_process_command_line) not contains "edge"))
+OR (event_type=FILE and lowercase(action_file_path) ~= "\\device\\namedpipe\\msse-\d+-server" or lowercase(action_file_path) ~= "\\device\\namedpipe\\postex_[a-z0-9]{4}" or lowercase(action_file_path) ~= "\\device\\namedpipe\\status_[a-z0-9]{4}" or lowercase(action_file_path) ~= "\\device\\namedpipe\\msagent_[a-z0-9]{4}")
+OR (event_type = PROCESS and event_sub_type = PROCESS_START and (lowercase(action_process_image_name) contains "powershell.exe" OR lowercase(actor_process_image_name) contains "cmd.exe") AND ((lowercase(action_process_image_command_line) contains "-enc jabzad0" OR lowercase(action_process_image_command_line) contains "-encodedcommand jabzad0" )))
+OR (event_type = STORY and lowercase(dst_action_external_hostname) contains "aaa.stage")
+OR (event_type = EVENT_LOG and (action_evtlog_message ~= "\$s=New-Object IO.MemoryStream" OR action_evtlog_message ~= "\$var_code"))
+| fields agent_hostname, agent_id, agent_ip_addresses , agent_version, actor_effective_username, actor_process_image_name, actor_process_image_path, actor_process_command_line, action_process_image_command_line, action_file_path, action_evtlog_username, action_evtlog_message, actor_process_signature_vendor
+// Remove FPs
+| filter not ((actor_process_image_path contains "Microsoft\EdgeWebView\Application" or actor_process_image_path contains "Microsoft\EdgeUpdate\Install" or actor_process_image_path contains "Microsoft\Edge\Application" or actor_process_image_path contains "Chromium" or actor_process_image_path contains "Installer\setup.exe") and (actor_process_signature_vendor = "Microsoft Corporation" or actor_process_image_name = "setup.exe"))
