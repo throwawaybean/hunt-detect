@@ -1,0 +1,41 @@
+// Description: Detects batch files created by one of the powershell scripts
+
+config case_sensitive = false
+| dataset = xdr_data 
+
+| filter event_type = ENUM.FILE and event_sub_type in (ENUM.FILE_CREATE_NEW, ENUM.FILE_WRITE) 
+| filter actor_process_image_name = "powershell.exe" and action_file_name in ("k1.bat", "k2.bat", "scheduler-once.bat")
+
+| fields _time, agent_hostname, actor_effective_username, actor_process_image_name, actor_process_command_line, action_file_name, action_file_path, actor_process_signature_status
+
+
+// Description: New user account named _bootuefi_ created 
+
+config case_sensitive = false
+| dataset = xdr_data
+
+| filter event_type = EVENT_LOG and action_evtlog_event_id = 4720
+
+| alter new_account_domain = lowercase(arrayindex(regextract(action_evtlog_message, "New Account:.*\r\n.*\r\n.*\r\n.*Account Domain:\s+(.*)\r\n"),0))
+| alter new_account_username = lowercase(arrayindex(regextract(action_evtlog_message, "New Account:.*\r\n.*\r\n.*Account Name:\s+(.*)\r\n"),0))
+| alter new_account_sid = arrayindex(regextract(action_evtlog_message, "New Account:.*\r\n.*Security ID:\s+(.*)\r\n"),0)
+| alter account_creator_username = lowercase(arrayindex(regextract(action_evtlog_message, "Subject:.*\r\n.*\r\n.*Account Name:\s+(.*)\r\n"),0))
+| alter account_creator_domain = lowercase(arrayindex(regextract(action_evtlog_message, "Subject:.*\r\n.*\r\n.*\r\n.*Account Domain:\s+(.*)\r\n"),0))
+
+| alter account_creator_is_local_account = if(lowercase(agent_hostname) = account_creator_domain, "true", "false")
+| alter local_account_created = if(lowercase(agent_hostname) = new_account_domain, "true", "false")
+
+| filter new_account_username = "_bootuefi_"
+
+| fields agent_hostname, local_account_created, new_account_username, new_account_sid, account_creator_username, account_creator_domain, account_creator_is_local_account, action_evtlog_message
+
+
+// Description: Detect scheduled task creation through command line arguments
+
+config case_sensitive = false
+| dataset = xdr_data
+| filter event_type = PROCESS and (
+    (action_process_image_name = "schtasks.exe" and action_process_image_command_line ~= "schtasks.*/create.*Intel\(R\) Ethernet2 Connection 1219-LM2?.*sysmon2?.bat")
+)
+| fields agent_hostname, actor_effective_username, causality_actor_process_command_line, actor_process_command_line, action_process_image_command_line
+
