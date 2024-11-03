@@ -1,0 +1,43 @@
+// Description: Query looks for processes with known-bad MD5 hashes executing
+// MITRE ATT&CK TTP IDs: T1027.011, T1055.001
+
+config case_sensitive = false
+| dataset = xdr_data 
+| filter event_type = ENUM.PROCESS 
+| filter action_process_image_md5 in ("ea474e87f23ce6575057e76108665ffb", "e0a8048c7f69da35bbb2cd35d86c2dc8", "6b3148e824fd84f54592fe5d2e766740", "c76b1ed6d094edbad887f68093ef6bf9", "d6d59b1ff85bf971286782f8f43d6326", "deedb32bf51dc8f3399614c8a9718e75", "c39b02c9771c6be9610977408ebb509f", "9eef43edc87ab1f301ec8730113535ee", "73a904ba602e1bf068f5d217403fa41f", "fe36fd0f09aadd3e7ddd7b66f18d5e93", "f12873d8b69624d972b3c6fa55e52483", "b5228638d5de18e59ebbddc13c120879", "4f1c68d2fe3b0255e706e4c7de0a739f", "3b07fbaa8b9c5a53658abe3ac9f66e60", "0dbaff93ec6243035275364d5c1c26c9")
+| fields _time, agent_hostname, action_process_username, action_process_image_name, action_process_image_path, action_process_image_command_line, action_process_image_sha256, action_process_cwd, action_process_file_info, action_process_file_size, action_process_file_web_mark, actor_effective_username, actor_process_image_name, actor_process_image_path, actor_process_image_command_line, causality_actor_primary_username, causality_actor_process_image_name, causality_actor_process_image_path, causality_actor_process_command_line, os_actor_primary_username, os_actor_process_image_name, os_actor_process_image_path, os_actor_process_image_command_line
+| sort desc _time
+
+---
+
+// Description: Query looks for known-bad DLLs (via MD5 hash) being loaded
+// MITRE ATT&CK TTP ID: T1055.001
+
+config case_sensitive = false
+| dataset = xdr_data 
+| filter event_type = ENUM.LOAD_IMAGE and action_module_md5 in ("ea474e87f23ce6575057e76108665ffb", "e0a8048c7f69da35bbb2cd35d86c2dc8", "6b3148e824fd84f54592fe5d2e766740", "c76b1ed6d094edbad887f68093ef6bf9", "d6d59b1ff85bf971286782f8f43d6326", "deedb32bf51dc8f3399614c8a9718e75", "c39b02c9771c6be9610977408ebb509f", "9eef43edc87ab1f301ec8730113535ee", "73a904ba602e1bf068f5d217403fa41f")
+| fields agent_hostname, actor_effective_username, actor_process_image_path, actor_process_image_sha256, action_module_path, action_module_md5, action_module_sha256
+
+---
+
+// Description: Query looks for files with known-bad MD5 hashes being interacted with (includes creation, writing, etc.)
+// MITRE ATT&CK TTP IDs: TA0002, T1204.002
+
+config case_sensitive = false
+| dataset = xdr_data 
+| filter event_type = ENUM.FILE
+| filter action_file_md5 in ("ea474e87f23ce6575057e76108665ffb", "e0a8048c7f69da35bbb2cd35d86c2dc8", "6b3148e824fd84f54592fe5d2e766740", "c76b1ed6d094edbad887f68093ef6bf9", "d6d59b1ff85bf971286782f8f43d6326", "deedb32bf51dc8f3399614c8a9718e75", "c39b02c9771c6be9610977408ebb509f", "9eef43edc87ab1f301ec8730113535ee", "73a904ba602e1bf068f5d217403fa41f", "fe36fd0f09aadd3e7ddd7b66f18d5e93", "f12873d8b69624d972b3c6fa55e52483", "b5228638d5de18e59ebbddc13c120879", "4f1c68d2fe3b0255e706e4c7de0a739f", "3b07fbaa8b9c5a53658abe3ac9f66e60", "0dbaff93ec6243035275364d5c1c26c9")
+| fields _time, agent_hostname, event_type, event_sub_type, action_file_name, action_file_path, actor_effective_username, action_file_extension, action_file_previous_file_path, action_file_sha256, action_file_size, actor_process_image_name, actor_process_image_path, actor_process_image_sha256, causality_actor_process_image_name, causality_actor_process_image_path, os_actor_primary_username, os_actor_process_command_line, os_actor_process_image_name, os_actor_process_image_path
+| sort desc _time
+
+---
+
+// Description: Query identifies access to known-bad host/DNS names associated with the threat (some false positives may occur)
+// MITRE ATT&CK TTP ID: T1071.001
+
+config case_sensitive = false
+| dataset = xdr_data
+| filter dst_action_external_hostname ~=".*foeake.org|.*inbullar.com|.*mangoaiml.com|.*ocouomors.com|.*paunsonaz.com|.*saraosting.com|.*temmans.com|.*torefrog.com" OR
+dns_query_name ~=".*foeake.org|.*inbullar.com|.*mangoaiml.com|.*ocouomors.com|.*paunsonaz.com|.*saraosting.com|.*temmans.com|.*torefrog.com" OR
+action_external_hostname ~=".*foeake.org|.*inbullar.com|.*mangoaiml.com|.*ocouomors.com|.*paunsonaz.com|.*saraosting.com|.*temmans.com|.*torefrog.com" 
+| fields agent_hostname, agent_version, causality_actor_process_image_path, actor_process_image_path, action_file_path, action_file_sha256, action_module_path, action_module_sha256, dst_action_external_hostname, dns_query_name, action_external_hostname, action_remote_ip, event_id
