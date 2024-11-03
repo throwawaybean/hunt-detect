@@ -1,0 +1,15 @@
+// Description: Suspicious enablement of PowerShell Web Access
+// MITRE ATT&CK TTP ID: T1059.001
+config case_sensitive = false  timeframe = 30d | dataset = xdr_data | filter event_type= ENUM.PROCESS and event_sub_type = ENUM.PROCESS_START | filter (actor_process_image_name in ("powershell.exe", "pwsh.exe") and actor_process_image_command_line in ("Install-WindowsFeature -Name WindowsPowerShellWebAccess -IncludeManagementTools", "Enable-WindowsOptionalFeature -Online -FeatureName WindowsPowerShellWebAccess")) or (actor_process_image_name = "dism.exe" and actor_process_command_line = "*/online /enable-feature /featurename:WindowsPowerShellWebAccess") | fields agent_hostname, actor_effective_username, actor_process_image_name, actor_process_command_line, action_process_image_name, action_process_image_command_line 
+
+// Description: Suspicious enablement of PowerShell Web Access on a Server using AMSI Content
+// MITRE ATT&CK TTP ID: T1059.001
+config case_sensitive = false timeframe = 30d | dataset = xdr_data | filter event_type = ENUM.EVENT_LOG and action_evtlog_event_id = 1101 | filter actor_process_image_name in ("powershell.exe", "pwsh.exe") | alter content = action_evtlog_data_fields -> content | filter content in ("*Install-WindowsFeature -Name WindowsPowerShellWebAccess -IncludeManagementTools*", "*Enable-WindowsOptionalFeature -Online -FeatureName WindowsPowerShellWebAccess*") | fields agent_hostname, actor_process_image_name, content 
+
+// Description: Detecting usage of PowerShell Web Access via Logon Events (pswa_pool)
+// MITRE ATT&CK TTP ID: T1021
+config case_sensitive = false  timeframe = 30d | dataset = xdr_data | filter event_type=ENUM.EVENT_LOG AND action_evtlog_event_id in (4624,4625,4648) | alter WorkstationName = action_evtlog_data_fields -> WorkstationName | alter WorkstationName = uppercase(WorkstationName) | alter LogonType = action_evtlog_data_fields -> LogonType | alter IpAddress = action_evtlog_data_fields -> IpAddress | alter TargetDomainName = action_evtlog_data_fields -> TargetDomainName | alter ProcessName = action_evtlog_data_fields -> ProcessName | alter TargetUserName = action_evtlog_data_fields -> TargetUserName | alter SubjectUserName = action_evtlog_data_fields -> SubjectUserName | filter SubjectUserName = "pswa_pool" | fields _time, agent_hostname,agent_id, SubjectUserName, WorkstationName,LogonType, IpAddress,TargetDomainName, TargetUserName, TargetDomainName, ProcessName, action_evtlog_data_fields , action_evtlog_message, action_evtlog_event_id 
+
+// Description: Suspicious connection to PowerShell Web Access GUI
+// MITRE ATT&CK TTP ID: T1021
+config case_sensitive = false timeframe = 30d | dataset = xdr_data | filter event_type = ENUM.STORY | filter uri = "*/pswa/*" | fields agent_hostname, actor_effective_username, action_local_ip, action_remote_ip, action_remote_port, dst_action_external_hostname, uri, http_referer 
