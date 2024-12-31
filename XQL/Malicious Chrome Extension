@@ -1,0 +1,25 @@
+
+// Hunting Malicious Chrome Extension
+
+// A new attack campaign has targeted known Chrome browser extensions, leading to at least 16 extensions being compromised and exposing over 600,000 users to data exposure and credential theft.
+// https://thehackernews.com/2024/12/16-chrome-extensions-hacked-exposing.html
+
+
+
+config case_sensitive = true |
+preset = xdr_file
+| filter agent_os_type = AGENT_OS_WINDOWS 
+| filter event_sub_type = FILE_CREATE_NEW
+| filter causality_actor_process_image_name = "chrome.exe"
+| filter action_file_path contains "\Webstore Downloads\"
+| filter action_file_name not contains "Zone.Identifier"
+| alter action_file_name = split(action_file_name, "_")
+| arrayexpand action_file_name 
+| filter action_file_name in("bibjgkidgpfbblifamdlkdlhgihmfohh","pkgciiiancapdlpcbppfkmeaieppikkk",
+"epdjhgbipjpbbhoccdeipghoihibnfja","bbdnohkpnbkdkmnkddobeafboooinpla","befflofjcniongenjmbkgkoljhgliihe",
+"cedgndijpacnfbdggppddacngjfdkaca","nnpnnpemnckcfdebeekibpiijlicmpom","dpggmcodlahmljkhlmpgpdcffdaoccni",
+"cplhlgabfijoiabgkigdafklbhhdkahj","egmennebgadmncfjafcemlecimkepcle","acmfnomgphggonodopogfbmkneepfgnh",
+"mnhffkhmpnefgklngfmlndmkimimbphc","oaikpkmjciadfpddlpjjdapglcihgdle","fbmlcbhdmilaggedifpihjgkkmdgeljh",
+"kkodiihpgodmdankclfibbiphjkfdenh","oeiomhmbaapihbilkfkhmlajkeegnjhe","jiofmdifioeejeilfkpegipdjiopiekl", 
+"hihblcmlaaademjlakdpicchbjnnnkbo", "ndlbedplllcgconngcnfmkadhokfaaln")
+| fields _time as Time, agent_hostname as Hostname, agent_ip_addresses as IPv4, actor_effective_username as User, action_file_name as extensionID
